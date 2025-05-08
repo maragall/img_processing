@@ -88,3 +88,4 @@ def generate_stage(tile_dir: Path) -> dict[str, int | str]:
         "gridWidth": gw,
         "gridHeight": gh,
     }
+    
