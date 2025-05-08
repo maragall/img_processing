@@ -1,92 +1,72 @@
-#!/usr/bin/env python3
+from pathlib import Path
 import re
+import numpy as np
 import pandas as pd
-from collections import deque
 
-# ─── 1. File-paths ───────────────────────────────────────────────────────────
-coord_path   = "/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/0/coordinates.csv"
-relpos_path  = "/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/Fluo405_relative-positions-1.txt"
+# Parameters
+MM_PER_PX = 0.000752  # mm per pixel
 
-# ─── 2. Load & backup ────────────────────────────────────────────────────────
-orig = pd.read_csv(coord_path)
-orig.to_csv("coordinates.backup.csv", index=False)
+# Load original coordinates
+coords_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/0/coordinates.csv")
+df_coords = pd.read_csv(coords_path)
+N = len(df_coords)
 
-# ─── 3. Compute row/col exactly as in generate_stage() ───────────────────────
-xs = sorted(orig["x (mm)"].unique())
-ys = sorted(orig["y (mm)"].unique())
-orig["col"] = orig["x (mm)"].map({x:i for i,x in enumerate(xs)})
-# MIST’s row 0 = topmost = largest Y
-orig["row"] = orig["y (mm)"].map({y:i for i,y in enumerate(reversed(ys))})
-
-# ─── 4. Parse relative-positions into directed edges ─────────────────────────
-pat = re.compile(
-    r"^(?P<dir>north|west),\s*"
-    r"(?P<curr>[^,]+),\s*"
-    r"(?P<prev>[^,]+),[^,]*,"
-    r"\s*(?P<dx>-?\d+),\s*(?P<dy>-?\d+)"
+# Parse MIST global positions
+txt_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/Fluo405_global-positions-1.txt")
+pattern = re.compile(
+    r"manual_r(?P<r>\d+)_c(?P<c>\d+)_0_.*?position:\s*\((?P<x_px>\d+),\s*(?P<y_px>\d+)\)"
 )
-edges = []
-with open(relpos_path) as f:
-    for L in f:
-        m = pat.search(L)
-        if not m: continue
-        edges.append((
-            m.group("prev").strip(),
-            m.group("curr").strip(),
-            int(m.group("dx")),
-            int(m.group("dy"))
-        ))
+records = []
+with open(txt_path) as f:
+    for line in f:
+        m = pattern.search(line)
+        if m:
+            d = {k: int(v) for k, v in m.groupdict().items()}
+            records.append(d)
+df_txt = pd.DataFrame(records)
 
-# ─── 5. Helpers to go filename⇄(row,col) ────────────────────────────────────
-tile_re = re.compile(r"manual_r(?P<r>\d+)_c(?P<c>\d+)_0_.*\.tiff")
-def rowcol(name):
-    m = tile_re.search(name)
-    return int(m.group("r")), int(m.group("c"))
+# Recompute grid indices from original coords
+xs = np.sort(df_coords["x (mm)"].unique())
+ys = np.sort(df_coords["y (mm)"].unique())
+df_map = df_coords[["fov", "x (mm)", "y (mm)"]].copy()
+df_map["c"] = df_map["x (mm)"].apply(lambda x: int(np.where(xs == x)[0][0]))
+df_map["r"] = df_map["y (mm)"].apply(lambda y: int(np.where(ys == y)[0][0]))
+df_map.rename(columns={"x (mm)": "x_mm_orig", "y (mm)": "y_mm_orig"}, inplace=True)
 
-# ─── 6. Build adjacency (bidirectional) keyed by (r,c) ──────────────────────
-adj = {}
-for prev_nm, curr_nm, dx, dy in edges:
-    pr = rowcol(prev_nm); cr = rowcol(curr_nm)
-    adj.setdefault(pr,[]).append((cr, dx,  dy))
-    adj.setdefault(cr,[]).append((pr, -dx, -dy))
+# Merge on (r, c)
+dfm = df_map.merge(df_txt, on=["r", "c"], how="inner", validate="one_to_one")
+assert len(dfm) == N, f"Joined {len(dfm)}/{N} tiles; check mapping."
 
-# ─── 7. BFS to assign every (r,c) a (x_pix,y_pix) ───────────────────────────
-pixpos = {(0,0):(0,0)}          # anchor top-left at (0,0)
-queue  = deque([(0,0)])
-while queue:
-    node = queue.popleft()
-    x0,y0 = pixpos[node]
-    for neigh, dx, dy in adj.get(node, []):
-        if neigh in pixpos: continue
-        pixpos[neigh] = (x0 + dx, y0 + dy)
-        queue.append(neigh)
+# Compute per-tile intercepts
+dfm["b_x_i"] = dfm["x_mm_orig"] - MM_PER_PX * dfm["x_px"]
+dfm["b_y_i"] = dfm["y_mm_orig"] - MM_PER_PX * dfm["y_px"]
 
-pixdf = pd.DataFrame([
-    {"row":r, "col":c, "x_pix":xp, "y_pix":yp}
-    for (r,c),(xp,yp) in pixpos.items()
-])
+# Global intercepts
+b_x = dfm["b_x_i"].mean()
+b_y = dfm["b_y_i"].mean()
+std_x = dfm["b_x_i"].std()
+std_y = dfm["b_y_i"].std()
 
-# ─── 8. Merge & sanity-check ─────────────────────────────────────────────────
-df = orig.merge(pixdf, on=["row","col"], how="left")
-if df[["x_pix","y_pix"]].isna().any().any():
-    bad = df[df.x_pix.isna()]
-    raise RuntimeError(
-        "Missing pixel data for:\n"
-        + bad[["fov","row","col"]].to_string(index=False)
-    )
+print(f"Slope (fixed): {MM_PER_PX} mm/px")
+print(f"Computed intercepts:")
+print(f"  b_x = {b_x:.6f} mm (std {std_x:.6f})")
+print(f"  b_y = {b_y:.6f} mm (std {std_y:.6f})\n")
 
-# ─── 9. Convert to mm & reanchor to real coords ──────────────────────────────
-pixel_size_um = 0.752           # your µm/px
-mm_per_px     = pixel_size_um/1000.0
+# Apply calibration
+dfm["x_mm_cal"] = MM_PER_PX * dfm["x_px"] + b_x
+dfm["y_mm_cal"] = MM_PER_PX * dfm["y_px"] + b_y
 
-ref = df.iloc[0]                # first real tile
-x0_mm = ref["x (mm)"] - ref.x_pix*mm_per_px
-y0_mm = ref["y (mm)"] - ref.y_pix*mm_per_px
+# Build final calibrated DataFrame
+df_final = df_coords.merge(
+    dfm[["fov", "x_mm_cal", "y_mm_cal"]], on="fov", validate="one_to_one"
+)
+df_final = df_final.drop(columns=["x (mm)", "y (mm)"])
+df_final = df_final.rename(columns={"x_mm_cal": "x (mm)", "y_mm_cal": "y (mm)"})
 
-df["x (mm)"] = df.x_pix*mm_per_px + x0_mm
-df["y (mm)"] = df.y_pix*mm_per_px + y0_mm
+# Save to CSV
+out_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/0/coordinates_calibrated.csv")
+df_final.to_csv(out_path, index=False)
 
-# ─── 10. Write out ────────────────────────────────────────────────────────────
-out = df.drop(columns=["row","col","x_pix","y_pix"])
-out.to_csv("coordinates.updated.csv", index=False)
-print("Done → coordinates.updated.csv (backup at coordinates.backup.csv)")
+# Display results
+print("First 5 rows of calibrated coordinates:")
+print(df_final.head())
