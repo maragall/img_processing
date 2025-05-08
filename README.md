@@ -1,1 +1,1 @@
-Software + Image Processing
+Software Projects + Image Processing
