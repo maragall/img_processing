@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+import logging
 
 from stitcher_pipeline.rename_stage import rename_stage
 from stitcher_pipeline.generate_stage import generate_stage
@@ -27,6 +28,10 @@ from stitcher_pipeline.mist_stage import (
     MISTMain,
     JStringArr,
 )
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 CHANNELS = ["405", "488", "561", "638"]
 
@@ -67,7 +72,9 @@ def _run_one_channel(
     Build the bean for a single channel, optionally turning on
     assembleFromMetadata + globalPositionsFile, then launch MISTMain.
     """
+    logger.info(f"Starting processing for channel {channel}")
     jp = build_params(tile_dir)
+    logger.info("Built parameters successfully")
 
     # override filename pattern and prefix for this channel
     ip = jp.getInputParams()
@@ -75,16 +82,21 @@ def _run_one_channel(
 
     pattern = f"manual_r{{rr}}_c{{cc}}_0_Fluorescence_{channel}_nm_Ex.tiff"
     ip.setFilenamePattern(pattern)
+    logger.info(f"Set filename pattern: {pattern}")
 
     prefix = f"Fluo{channel}_"
     op.setOutFilePrefix(prefix)
+    logger.info(f"Set output prefix: {prefix}")
 
     # assemble-from-metadata?
     if assemble_from_metadata:
+        logger.info("Setting up metadata-based assembly")
         ip.setAssembleFromMetadata(True)
         if not (metadata and metadata.is_file()):
+            logger.error(f"Metadata file not found: {metadata}")
             sys.exit(f"Metadata file not found: {metadata}")
         ip.setGlobalPositionsFile(metadata.as_posix())
+        logger.info(f"Using metadata file: {metadata}")
 
     # debug dump
     print(f"\n=== CHANNEL {channel} {'(from metadata)' if assemble_from_metadata else ''} ===")
@@ -92,19 +104,73 @@ def _run_one_channel(
     print("CLI ARGS:", cli_args)
 
     # invoke MISTMain
+    logger.info("Preparing to launch MISTMain")
     java_argv = JStringArr(len(cli_args))
     for i, a in enumerate(cli_args):
         java_argv[i] = a
 
-    print("Launching MISTMain…")
-    MISTMain.main(java_argv)
-    print("Done channel", channel)
+    logger.info("Launching MISTMain...")
+    try:
+        MISTMain.main(java_argv)
+        logger.info(f"Successfully completed channel {channel}")
+        return True
+    except Exception as e:
+        logger.error(f"Error processing channel {channel}: {str(e)}")
+        return False
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
 
-    if args.cmd == "rename":
+    if args.cmd == "full":
+        tile_dir = args.dir
+        logger.info(f"Starting full pipeline in directory: {tile_dir}")
+
+        # 1) Preprocess
+        logger.info("Starting rename stage")
+        rename_stage(tile_dir)
+        logger.info("Starting generate stage")
+        mist_dict = generate_stage(tile_dir)
+        logger.info("Starting uniformize stage")
+        uniformize_stage(tile_dir)
+
+        # 2) Stitch 405 nm first (no metadata)
+        logger.info("Starting first channel (405) processing")
+        if not _run_one_channel(tile_dir, "405", None, assemble_from_metadata=False):
+            logger.error("Failed to process first channel (405). Aborting pipeline.")
+            sys.exit(1)
+
+        # compute metadata path (parent dir / Fluo405_global-positions-1.txt)
+        parent = tile_dir.parent
+        meta_file = parent / "Fluo405_global-positions-1.txt"
+        logger.info(f"Looking for metadata file at: {meta_file}")
+
+        if not meta_file.exists():
+            logger.error(f"Metadata file not found at {meta_file}. Aborting pipeline.")
+            sys.exit(1)
+
+        # 3) Stitch other channels using that metadata
+        failed_channels = []
+        for ch in CHANNELS[1:]:
+            logger.info(f"Starting processing for channel {ch}")
+            if not _run_one_channel(
+                tile_dir,
+                ch,
+                metadata=meta_file,
+                assemble_from_metadata=True
+            ):
+                logger.error(f"Failed to process channel {ch}")
+                failed_channels.append(ch)
+            else:
+                logger.info(f"Completed processing for channel {ch}")
+
+        if failed_channels:
+            logger.error(f"The following channels failed to process: {', '.join(failed_channels)}")
+            sys.exit(1)
+        else:
+            logger.info("All channels processed successfully")
+
+    elif args.cmd == "rename":
         rename_stage(args.dir)
 
     elif args.cmd == "generate-params":
@@ -114,32 +180,7 @@ def main(argv: list[str] | None = None) -> None:
         uniformize_stage(args.dir)
 
     elif args.cmd == "run-mist":
-        # single‐channel run: prompt user for channel and metadata manually
         sys.exit("Use 'full' for multi‐channel automated runs.")
-
-    elif args.cmd == "full":
-        tile_dir = args.dir
-
-        # 1) Preprocess
-        rename_stage(tile_dir)
-        mist_dict = generate_stage(tile_dir)
-        uniformize_stage(tile_dir)
-
-        # 2) Stitch 405 nm first (no metadata)
-        _run_one_channel(tile_dir, "405", None, assemble_from_metadata=False)
-
-        # compute metadata path (parent dir / Fluo405_global-positions-1.txt)
-        parent = tile_dir.parent
-        meta_file = parent / "Fluo405_global-positions-1.txt"
-
-        # 3) Stitch other channels using that metadata
-        for ch in CHANNELS[1:]:
-            _run_one_channel(
-                tile_dir,
-                ch,
-                metadata=meta_file,
-                assemble_from_metadata=True
-            )
 
     else:
         sys.exit("Unknown command")
