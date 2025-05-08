@@ -118,7 +118,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
 
     # ── INPUT ──────────────────────────────────────────────────────────────
     ip.setImageDir(tile_dir.as_posix())
-    ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_638_nm_Ex.tiff")
+    ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_405_nm_Ex.tiff")
     ip.setFilenamePatternLoaderType(LoaderType.ROWCOL)
     ip.setGridWidth(8)
     ip.setGridHeight(11)
@@ -130,13 +130,13 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     ip.setStartCol(0)
     ip.setExtentWidth(8)
     ip.setExtentHeight(11)
-    ip.setAssembleFromMetadata(True)
+    ip.setAssembleFromMetadata(False)
     ip.setAssembleNoOverlap(False)
     ip.setTimeSlicesEnabled(False)
 
     # ── OUTPUT ─────────────────────────────────────────────────────────────
     op.setOutputPath(str(tile_dir.parent))
-    op.setOutFilePrefix("Fluo638_")
+    op.setOutFilePrefix("Fluo405_")
     op.setBlendingMode(BlendingMode.OVERLAY)
     op.setBlendingAlpha(float(0.0))
     op.setCompressionMode(CompressionMode.UNCOMPRESSED)
