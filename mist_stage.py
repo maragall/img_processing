@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 mist_stage.py — single-file, non-negotiable launch of NIST-MIST from Python.
-Every public parameter, enum, and flag is driven off the bean’s metadata so
+Every public parameter, enum, and flag is driven off the bean's metadata so
 you never mistype a flag.
 
 Prerequisites
@@ -20,6 +20,13 @@ import os, sys
 from pathlib import Path
 from typing import Any
 import math
+import logging
+import threading
+import time
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # JVM bootstrap
@@ -36,8 +43,11 @@ def _init_fiji() -> tuple[Any, Any]:
         sys.exit("Set FIJI_DIR to a Fiji.app folder with MIST installed.")
 
     try:
+        logger.info(f"Initializing ImageJ from {fiji_dir}")
         ij = imagej.init(fiji_dir.as_posix(), mode="headless")
+        logger.info("ImageJ initialized successfully")
     except JVMNotFoundException as e:
+        logger.error(f"Failed to initialize ImageJ: {str(e)}")
         sys.exit("No JDK found — install OpenJDK.\n" + str(e))
 
     return ij, scyjava
@@ -78,7 +88,7 @@ def bean_to_cli_args(jp: Any) -> list[str]:
     for bean in parts.values():
         names = list(bean.getParameterNamesList())
         for name in names:
-            # ← CHANGED: handle params whose getter suffix doesn’t match the name
+            # ← CHANGED: handle params whose getter suffix doesn't match the name
             cap = {
                 "gridOrigin":       "Origin",
                 "numberingPattern": "Numbering",
@@ -176,6 +186,95 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
 
     return jp  # ← CHANGED: no more JSON, return bean
 
+def run_mist_with_timeout(java_argv: Any, timeout_seconds: int = 3600) -> bool:
+    """
+    Run MIST with a timeout. Returns True if successful, False if timed out.
+    """
+    result = {"success": False, "error": None}
+    
+    def run_mist():
+        try:
+            logger.info("Starting MIST process")
+            MISTMain.main(java_argv)
+            result["success"] = True
+            logger.info("MIST process completed successfully")
+        except Exception as e:
+            result["error"] = str(e)
+            logger.error(f"MIST process failed: {str(e)}")
+    
+    thread = threading.Thread(target=run_mist)
+    thread.daemon = True
+    thread.start()
+    
+    # Wait for the thread to complete or timeout
+    thread.join(timeout_seconds)
+    
+    if thread.is_alive():
+        logger.error(f"MIST process timed out after {timeout_seconds} seconds")
+        return False
+    
+    if not result["success"]:
+        logger.error(f"MIST process failed: {result['error']}")
+        return False
+    
+    return True
+
+def _run_one_channel(
+    tile_dir: Path,
+    channel: str,
+    metadata: Path | None,
+    assemble_from_metadata: bool
+) -> bool:
+    """
+    Build the bean for a single channel and launch MISTMain with timeout.
+    Returns True if successful, False if failed or timed out.
+    """
+    try:
+        logger.info(f"Building parameters for channel {channel}")
+        jp = build_params(tile_dir)
+
+        # override filename pattern and prefix for this channel
+        ip = jp.getInputParams()
+        op = jp.getOutputParams()
+
+        pattern = f"manual_r{{rr}}_c{{cc}}_0_Fluorescence_{channel}_nm_Ex.tiff"
+        ip.setFilenamePattern(pattern)
+        logger.info(f"Set filename pattern: {pattern}")
+
+        prefix = f"Fluo{channel}_"
+        op.setOutFilePrefix(prefix)
+        logger.info(f"Set output prefix: {prefix}")
+
+        if assemble_from_metadata:
+            logger.info("Setting up metadata-based assembly")
+            ip.setAssembleFromMetadata(True)
+            if not (metadata and metadata.is_file()):
+                logger.error(f"Metadata file not found: {metadata}")
+                return False
+            ip.setGlobalPositionsFile(metadata.as_posix())
+            logger.info(f"Using metadata file: {metadata}")
+
+        cli_args = bean_to_cli_args(jp)
+        logger.info(f"Generated CLI arguments for channel {channel}")
+
+        java_argv = JStringArr(len(cli_args))
+        for i, a in enumerate(cli_args):
+            java_argv[i] = a
+
+        logger.info(f"Launching MIST for channel {channel}")
+        success = run_mist_with_timeout(java_argv)
+        
+        if success:
+            logger.info(f"Successfully completed channel {channel}")
+        else:
+            logger.error(f"Failed to complete channel {channel}")
+        
+        return success
+
+    except Exception as e:
+        logger.error(f"Error processing channel {channel}: {str(e)}")
+        return False
+
 # --------------------------------------------------------------------------- #
 #  Entry
 # --------------------------------------------------------------------------- #
@@ -195,7 +294,7 @@ def main() -> None:
 
     print("Launching MIST with exact bean-derived flags…")
     MISTMain.main(java_argv)                            # ← CHANGED
-    print(" MIST stitching job started — tail Fiji’s *Log* window.")
+    print(" MIST stitching job started — tail Fiji's *Log* window.")
 
 if __name__ == "__main__":
     main()
