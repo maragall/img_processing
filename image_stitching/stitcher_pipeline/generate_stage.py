@@ -80,11 +80,8 @@ def generate_stage(tile_dir: Path) -> dict[str, int | str]:
         "  Filename Pattern Type : Row-Column"
     )
     print(f"  Filename Pattern      : {_pattern_for_mist(ch_suffixes[0])}")
-    print("  Starting Point        : Upper Left")
-    print("  Direction             : Horizontal Continuous")
     print(f"  Grid Width            : {gw}")
     print(f"  Grid Height           : {gh}")
-    print("  Start Row / Col       : 0")
 
     return {
         "filenamePattern": _pattern_for_mist(ch_suffixes[0]),

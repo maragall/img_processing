@@ -149,7 +149,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     op.setPerPixelY(0.752)
 
     # ── ADVANCED ───────────────────────────────────────────────────────────
-    adv.setProgramType(StitchingType.FFTW)
+    adv.setProgramType(StitchingType.JAVA)
     adv.setUseDoublePrecision(True)
     adv.setNumCPUThreads(min(os.cpu_count() or 8, 16))
     adv.setHorizontalOverlap(float("nan"))
@@ -195,7 +195,7 @@ def main() -> None:
 
     print("Launching MIST with exact bean-derived flags…")
     MISTMain.main(java_argv)                            # ← CHANGED
-    print("MIST stitching job started — tail Fiji’s *Log* window.")
+    print(" MIST stitching job started — tail Fiji’s *Log* window.")
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,5 @@
+"""Stage 1 – zero-pad FOV indices in TIFF filenames & coordinates.csv."""
+
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path
