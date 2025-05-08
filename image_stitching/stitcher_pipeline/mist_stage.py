@@ -29,16 +29,16 @@ def _init_fiji() -> tuple[Any, Any]:
         import imagej, scyjava
         from jpype._jvmfinder import JVMNotFoundException
     except ImportError:
-        sys.exit("❌  pip install imagej scyjava")
+        sys.exit("pip install imagej scyjava")
 
     fiji_dir = Path(os.environ.get("FIJI_DIR", "")).expanduser()
     if not fiji_dir.is_dir():
-        sys.exit("❌  Set FIJI_DIR to a Fiji.app folder with MIST installed.")
+        sys.exit("Set FIJI_DIR to a Fiji.app folder with MIST installed.")
 
     try:
         ij = imagej.init(fiji_dir.as_posix(), mode="headless")
     except JVMNotFoundException as e:
-        sys.exit("❌  No JDK found — install OpenJDK.\n" + str(e))
+        sys.exit("No JDK found — install OpenJDK.\n" + str(e))
 
     return ij, scyjava
 
@@ -185,7 +185,7 @@ def main() -> None:
 
     tile_dir = Path(sys.argv[1]).expanduser().resolve()
     if not tile_dir.is_dir():
-        sys.exit("❌  tile_dir must be a directory containing your TIFF grid.")
+        sys.exit("tile_dir must be a directory containing your TIFF grid.")
 
     jp = build_params(tile_dir)                         # ← CHANGED
     cli_args = bean_to_cli_args(jp)                     # ← CHANGED
@@ -193,9 +193,9 @@ def main() -> None:
     for i, arg in enumerate(cli_args):
         java_argv[i] = arg                              # ← CHANGED
 
-    print("🚀  Launching MIST with exact bean-derived flags…")
+    print("Launching MIST with exact bean-derived flags…")
     MISTMain.main(java_argv)                            # ← CHANGED
-    print("🎉  MIST stitching job started — tail Fiji’s *Log* window.")
+    print("MIST stitching job started — tail Fiji’s *Log* window.")
 
 if __name__ == "__main__":
     main()
