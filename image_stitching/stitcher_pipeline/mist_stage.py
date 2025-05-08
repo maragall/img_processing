@@ -15,7 +15,7 @@ Run
     python mist_stage.py /absolute/path/to/0          # directory that holds the TIFF grid
 """
 
-from __future__ import annotations
+from __future__ import annotations 
 import os, sys
 from pathlib import Path
 from typing import Any
@@ -118,7 +118,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
 
     # ── INPUT ──────────────────────────────────────────────────────────────
     ip.setImageDir(tile_dir.as_posix())
-    ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_405_nm_Ex.tiff")
+    ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_638_nm_Ex.tiff")
     ip.setFilenamePatternLoaderType(LoaderType.ROWCOL)
     ip.setGridWidth(8)
     ip.setGridHeight(11)
@@ -130,30 +130,30 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     ip.setStartCol(0)
     ip.setExtentWidth(8)
     ip.setExtentHeight(11)
-    ip.setAssembleFromMetadata(False)
+    ip.setAssembleFromMetadata(True)
     ip.setAssembleNoOverlap(False)
     ip.setTimeSlicesEnabled(False)
 
     # ── OUTPUT ─────────────────────────────────────────────────────────────
     op.setOutputPath(str(tile_dir.parent))
-    op.setOutFilePrefix("img-")
+    op.setOutFilePrefix("Fluo638_")
     op.setBlendingMode(BlendingMode.OVERLAY)
-    op.setBlendingAlpha(float(1.5))
+    op.setBlendingAlpha(float(0.0))
     op.setCompressionMode(CompressionMode.UNCOMPRESSED)
     op.setDisplayStitching(True)
     op.setOutputFullImage(True)
     op.setOutputMeta(True)
-    op.setOutputImgPyramid(False)
+    op.setOutputImgPyramid(True)
     op.setPerPixelUnit(Unit.MICROMETER)
-    op.setPerPixelX(1.0)
-    op.setPerPixelY(1.0)
+    op.setPerPixelX(0.752)
+    op.setPerPixelY(0.752)
 
     # ── ADVANCED ───────────────────────────────────────────────────────────
-    adv.setProgramType(StitchingType.JAVA)
+    adv.setProgramType(StitchingType.FFTW)
     adv.setUseDoublePrecision(True)
     adv.setNumCPUThreads(min(os.cpu_count() or 8, 16))
-    adv.setHorizontalOverlap(float(15.0))
-    adv.setVerticalOverlap(float(15.0))
+    adv.setHorizontalOverlap(float("nan"))
+    adv.setVerticalOverlap(float("nan"))
     adv.setOverlapUncertainty(float("nan"))
     adv.setNumFFTPeaks(0)
     adv.setRepeatability(0)
