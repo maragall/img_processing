@@ -83,7 +83,7 @@ def _run_one_channel(
     if assemble_from_metadata:
         ip.setAssembleFromMetadata(True)
         if not (metadata and metadata.is_file()):
-            sys.exit(f"❌  Metadata file not found: {metadata}")
+            sys.exit(f"Metadata file not found: {metadata}")
         ip.setGlobalPositionsFile(metadata.as_posix())
 
     # debug dump
@@ -96,9 +96,9 @@ def _run_one_channel(
     for i, a in enumerate(cli_args):
         java_argv[i] = a
 
-    print("🚀  Launching MISTMain…")
+    print("Launching MISTMain…")
     MISTMain.main(java_argv)
-    print("✅  Done channel", channel)
+    print("Done channel", channel)
 
 
 def main(argv: list[str] | None = None) -> None:
