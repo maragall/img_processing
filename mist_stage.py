@@ -159,7 +159,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     op.setPerPixelY(0.752)
 
     # ── ADVANCED ───────────────────────────────────────────────────────────
-    adv.setProgramType(StitchingType.JAVA)
+    adv.setProgramType(StitchingType.FFTW)
     adv.setUseDoublePrecision(True)
     adv.setNumCPUThreads(min(os.cpu_count() or 8, 16))
     adv.setHorizontalOverlap(float("nan"))
