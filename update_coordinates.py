@@ -7,12 +7,12 @@ import pandas as pd
 MM_PER_PX = 0.000752  # mm per pixel
 
 # Load original coordinates
-coords_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/0/coordinates.csv")
+coords_path = Path("/home/cephla/Downloads/widefield_2025-03-25_15-37-00.025884/0/coordinates.csv")
 df_coords = pd.read_csv(coords_path)
 N = len(df_coords)
 
 # Parse MIST global positions
-txt_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/Fluo405_global-positions-1.txt")
+txt_path = Path("/home/cephla/Downloads/widefield_2025-03-25_15-37-00.025884/Fluo405_global-positions-1.txt")
 pattern = re.compile(
     r"manual_r(?P<r>\d+)_c(?P<c>\d+)_0_.*?position:\s*\((?P<x_px>\d+),\s*(?P<y_px>\d+)\)"
 )
@@ -64,7 +64,7 @@ df_final = df_final.drop(columns=["x (mm)", "y (mm)"])
 df_final = df_final.rename(columns={"x_mm_cal": "x (mm)", "y_mm_cal": "y (mm)"})
 
 # Save to CSV
-out_path = Path("/home/cephla/Downloads/10x_mouse_brain_2025-04-23_00-53-11.236590/0/coordinates_calibrated.csv")
+out_path = Path("/home/cephla/Downloads/widefield_2025-03-25_15-37-00.025884/0/coordinates_calibrated.csv")
 df_final.to_csv(out_path, index=False)
 
 # Display results

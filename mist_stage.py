@@ -131,7 +131,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_405_nm_Ex.tiff")
     ip.setFilenamePatternLoaderType(LoaderType.ROWCOL)
     ip.setGridWidth(8)
-    ip.setGridHeight(11)
+    ip.setGridHeight(7)
     ip.setOrigin(GridOrigin.UL)
     ip.setNumbering(GridDirection.HORIZONTALCOMBING)
     ip.setStartTileRow(0)
@@ -139,7 +139,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     ip.setStartRow(0)
     ip.setStartCol(0)
     ip.setExtentWidth(8)
-    ip.setExtentHeight(11)
+    ip.setExtentHeight(7)
     ip.setAssembleFromMetadata(False)
     ip.setAssembleNoOverlap(False)
     ip.setTimeSlicesEnabled(False)
@@ -155,8 +155,8 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
     op.setOutputMeta(True)
     op.setOutputImgPyramid(True)
     op.setPerPixelUnit(Unit.MICROMETER)
-    op.setPerPixelX(0.752)
-    op.setPerPixelY(0.752)
+    op.setPerPixelX(7.52)
+    op.setPerPixelY(7.52)
 
     # ── ADVANCED ───────────────────────────────────────────────────────────
     adv.setProgramType(StitchingType.FFTW)
