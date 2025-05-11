@@ -33,7 +33,7 @@ from stitcher_pipeline.mist_stage import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-CHANNELS = ["405", "488", "561", "638"]
+CHANNELS = ["405"]#, "488", "561", "638"]
 
 
 def _add(sub, name: str, help_: str):
