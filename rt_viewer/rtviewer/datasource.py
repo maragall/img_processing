@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Union, Dict, Tuple, List
 
 import numpy as np
+import pandas as pd
 import dask.array as da
 import tifffile
 
@@ -173,3 +174,43 @@ class DataSource:
                    c * tile_w:(c + 1) * tile_w] = tile_arr
 
         return da.from_array(mosaic, chunks=(tile_h, tile_w))
+    
+    def get_tile_centers(self) -> Dict[int, Tuple[float, float]]:
+        """
+        Read the per-plane coordinates.csv (in the z=0 folder) and return
+        a mapping from FOV index → (y_center_px, x_center_px).
+
+        Expects the CSV to have at least these columns:
+          - 'fov'     : integer tile index
+          - 'x (mm)'  : stage X position in millimeters
+          - 'y (mm)'  : stage Y position in millimeters
+
+        Converts mm → μm → pixels using self.sensor_pixel_size_um.
+        """
+        coords_csv = self.root / "0" / "coordinates.csv"
+        if not coords_csv.is_file():
+            raise FileNotFoundError(f"Missing coordinates.csv at '{coords_csv}'")
+
+        df = pd.read_csv(coords_csv)
+        centers: Dict[int, Tuple[float, float]] = {}
+        for _, row in df.iterrows():
+            try:
+                fov   = int(row["fov"])
+                x_mm  = float(row["x (mm)"])
+                y_mm  = float(row["y (mm)"])
+            except KeyError as e:
+                raise ValueError(f"Expected column {e} in '{coords_csv}'")
+            except Exception as e:
+                raise ValueError(f"Error parsing row in '{coords_csv}': {e}")
+
+            # mm → μm → pixels
+            x_px = (x_mm * 1_000) / self.sensor_pixel_size_um
+            y_px = (y_mm * 1_000) / self.sensor_pixel_size_um
+
+            centers[fov] = (y_px, x_px)
+
+        if not centers:
+            raise RuntimeError(f"No entries found in '{coords_csv}'")
+
+        return centers
+

@@ -9,17 +9,18 @@ class PyramidBuilder:
     """
     Builds downsampled overview mosaics at specified zoom levels.
 
-    Uses Dask's coarsen for block-mean downsampling. Stub-mode DataSource
-    supplies dummy data when tests run without real images.
+    Uses Dask's coarsen to perform block-mean downsampling on the base overview.
     """
     def __init__(self, datasource: DataSource, zoom_levels: List[int]) -> None:
         """
+        Initialize with a DataSource and desired downsampling factors.
+
         Parameters
         ----------
         datasource : DataSource
-            Source of full-resolution overview images.
+            Source for the full-resolution overview (level=1).
         zoom_levels : List[int]
-            Integer downsampling factors for each pyramid level.
+            Downsampling factors for each pyramid level (e.g. [4, 8, 16]).
         """
         self.datasource = datasource
         self.zoom_levels = zoom_levels
@@ -31,20 +32,24 @@ class PyramidBuilder:
         Returns
         -------
         Dict[int, dask.array.Array]
-            Mapping from downsampling factor to Dask array of the overview.
+            Mapping from downsampling factor to Dask array of the overview at that level.
         """
-        # Load base overview at level=1 (full resolution)
+        # Load the full-resolution overview (level=1)
         base_overview = self.datasource.load_overview(level=1)
 
         levels: Dict[int, da.Array] = {}
         for factor in self.zoom_levels:
-            # Block-mean downsampling stub
-            downsampled = da.coarsen(
-                np.mean,
-                base_overview,
-                {0: factor, 1: factor},
-                trim_excess=True,
-            )
-            levels[factor] = downsampled
+            if factor <= 1:
+                # Level 1 or invalid factor: return base overview
+                levels[factor] = base_overview
+            else:
+                # Block-mean downsampling
+                downsampled = da.coarsen(
+                    np.mean,
+                    base_overview,
+                    {0: factor, 1: factor},
+                    trim_excess=True
+                )
+                levels[factor] = downsampled
 
         return levels

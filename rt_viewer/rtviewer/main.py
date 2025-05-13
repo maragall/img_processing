@@ -34,8 +34,8 @@ def main():
     ds = DataSource(root)
     cache = TileCache(ds, max_bytes)
     pyramid = PyramidBuilder(ds, [4, 8, 16])
-    adapter = MISTAdapter()
-    renderer = TileRenderer()
+    adapter = MISTAdapter(root)
+    renderer = TileRenderer(cache)
 
     # Launch viewer
     controller = ViewerController(ds, cache, pyramid, adapter, renderer)
