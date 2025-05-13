@@ -1,9 +1,0 @@
-napari[all]
-dask[array]
-zarr
-vispy
-qtpy
-cachetools
-
-[gpu]
-cupy-cuda12x
