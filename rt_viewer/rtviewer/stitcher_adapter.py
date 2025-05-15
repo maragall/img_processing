@@ -175,24 +175,32 @@ class MISTAdapter:
             h, w = img.shape[:2]
             dtype = img.dtype
 
-            if dtype == np.uint8:
-                arr = JArray(JByte)(img.ravel().tolist())
-                iproc = self.ByteProcessor(w, h, arr, None)
-            elif dtype == np.uint16:
-                arr = JArray(JShort)(img.ravel().tolist())
-                iproc = self.ShortProcessor(w, h, arr, None)
-            elif np.issubdtype(dtype, np.floating):
-                arr = JArray(JFloat)(img.astype("float32").ravel().tolist())
-                iproc = self.FloatProcessor(w, h, arr, None)
-            else:
-                norm8 = (img / img.max() * 255).astype("uint8")
-                arr = JArray(JByte)(norm8.ravel().tolist())
-                iproc = self.ByteProcessor(w, h, arr, None)
+        if dtype == np.uint8:
+            # map 0–255 → signed int8 for Java byte[]
+            signed = img.astype(np.int8)
+            arr    = JArray(JByte)(signed.ravel().tolist())
+            iproc  = self.ByteProcessor(w, h, arr, None)
+
+        elif dtype == np.uint16:
+            arr   = JArray(JShort)(img.ravel().tolist())
+            iproc = self.ShortProcessor(w, h, arr, None)
+
+        elif np.issubdtype(dtype, np.floating):
+            arr   = JArray(JFloat)(img.astype("float32").ravel().tolist())
+            iproc = self.FloatProcessor(w, h, arr, None)
+
+        else:
+            # normalize any other type into 0–255, then into signed byte
+            norm8  = (img / img.max() * 255).astype("uint8")
+            signed = norm8.astype(np.int8)
+            arr    = JArray(JByte)(signed.ravel().tolist())
+            iproc  = self.ByteProcessor(w, h, arr, None)
 
             tile_images[idx] = iproc
 
         # 3. build the TileGrid and inject tiles
-        grid = self.TileGrid(num_rows, num_cols)
+        total_tiles = num_rows * num_cols
+        grid = self.TileGrid(jp, total_tiles, self.ImageTileClass)
         for idx, iproc in tile_images.items():
             r, c = divmod(idx, num_cols)
             tile = self.ImageTileClass(self.File("in_memory"), r, c)

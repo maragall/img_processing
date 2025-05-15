@@ -1,8 +1,13 @@
+#!/usr/bin/env python3
+# rtviewer/controller.py
+
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import napari
 from qtpy.QtCore import QTimer
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
+
+import pandas as pd
 
 from .datasource import DataSource
 from .cache import TileCache
@@ -34,22 +39,33 @@ class ViewerController:
         self.adapter = adapter
         self.renderer = renderer
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
+        # Napari viewer and layer will be set in run()
         self.viewer: Any = None
         self.image_layer: Any = None
-        # Precompute tile center positions (in pixel coords) for visibility tests
-        # expects DataSource.get_tile_centers() -> Dict[fov, (y_center_px, x_center_px)]
+
+        # Precompute tile center positions (in pixel coords)
         self.tile_centers: Dict[int, Tuple[float, float]] = self.datasource.get_tile_centers()
+
+        # Infer full grid dimensions from coordinates.csv (z=0)
+        coords_csv = self.datasource.root / "0" / "coordinates.csv"
+        df = pd.read_csv(coords_csv)
+        xs = df["x (mm)"].unique()
+        ys = df["y (mm)"].unique()
+        self.grid_ncols = len(xs)
+        self.grid_nrows = len(ys)
 
     def run(self, root: Path) -> None:
         """
-        Launch Napari, show overview, and hook zoom/pan events.
+        Launch Napari, show overview, and hook zoom & pan events.
         """
         self.datasource.root = root
-        levels = self.pyramid.build_levels()
-        self.overview_levels = levels
-        # Use level=16 overview to display initially
-        overview = levels[16]
 
+        # Build overview pyramid levels
+        levels = self.pyramid.build_levels()
+        overview = levels[16]  # start at lowest resolution
+
+        # Create Napari viewer and add the overview
         self.viewer = napari.Viewer()
         self.image_layer = self.viewer.add_image(
             overview,
@@ -58,59 +74,76 @@ class ViewerController:
             scale=[16, 16],
         )
 
-        # Hook camera and layer events to on_view_changed
-        try:
-            self.viewer.camera.events.interactive.connect(self.on_view_changed)
-        except Exception:
-            self.image_layer.events.scale.connect(self.on_view_changed)
+        # Hook only the PUBLIC Napari camera events for zoom and pan.
+        # Removed: canvas.events.camera_changed (private API, deprecated),
+        #          and layer.events.scale / viewer.events.interactive,
+        #          because they didn’t reliably fire in Napari 0.6+.
+        self.viewer.camera.events.zoom.connect(self.on_view_changed)
+        self.viewer.camera.events.center.connect(self.on_view_changed)
 
         napari.run()
 
     def on_view_changed(self, event: Any = None) -> None:
         """
-        Called on zoom/pan: determine visible tiles, stitch them in background,
-        and update composite on Qt main thread when done.
+        Called on zoom or pan: determine visible tiles, stitch them in background,
+        and update the composite on the Qt main thread.
         """
-        # Determine current view center and zoom
         cam = self.viewer.camera
-        center = cam.center  # (y_center, x_center)
-        zoom = cam.zoom      # scale factor
+        center = cam.center  # (y, x)
+        zoom = cam.zoom
 
-        # Determine half-window in data pixels
+        # Debug print to confirm the event fires
+        print(f"[DEBUG] on_view_changed: center={center}, zoom={zoom:.2f}")
+
+        # Compute the pixel‐space bounds of the viewport
         h, w = self.image_layer.data.shape
         half_h = (h / zoom) / 2.0
         half_w = (w / zoom) / 2.0
-        ymin = center[0] - half_h
-        ymax = center[0] + half_h
-        xmin = center[1] - half_w
-        xmax = center[1] + half_w
+        ymin, ymax = center[0] - half_h, center[0] + half_h
+        xmin, xmax = center[1] - half_w, center[1] + half_w
 
-        # Determine which FOVs are visible in this view
-        visible_fovs = []
-        for fov, (y_c, x_c) in self.tile_centers.items():
-            if xmin <= x_c <= xmax and ymin <= y_c <= ymax:
-                visible_fovs.append(fov)
+        # Figure out which FOVs lie inside the current view
+        visible_fovs: List[int] = [
+            fov for fov, (y_c, x_c) in self.tile_centers.items()
+            if xmin <= x_c <= xmax and ymin <= y_c <= ymax
+        ]
 
-        # Load tile arrays for each visible fov at full resolution
-        tiles = []
-        for fov in visible_fovs:
-            tile_arr = self.cache.get(fov, 0, 1)  # z=0, level=1
-            tiles.append(tile_arr)
+        # Load those tiles at full resolution
+        tiles = [ self.cache.get(fov, 0, 1) for fov in visible_fovs ]
 
-        # Submit background stitching job
-        future = self.executor.submit(self.adapter.align_tiles, tiles)
+        # Submit the headless‐MIST stitch job
+        future = self.executor.submit(
+            self.adapter.align_tiles,
+            tiles,
+            self.grid_nrows,
+            self.grid_ncols
+        )
 
         def on_done(fut):
-            offsets = fut.result()  # DataFrame with columns ['fov','dx','dy']
-            # Choose composite level based on zoom thresholds
+            # Remove any prior status overlay logic: we erased add_text entirely.
+            # If you want UI feedback, use a Shapes/Text layer, but Napari Viewer.add_text
+            # does not exist, so we stick to console logs.
+
+            # Check for error
+            if fut.exception():
+                print(f"[ERROR] stitching failed: {fut.exception()}")
+                return
+
+            # Map tile_index → fov
+            df = fut.result()
+            df["fov"] = df["tile_index"].map(lambda idx: visible_fovs[idx])
+            offsets = df[["fov", "dx", "dy"]]
+
+            # Pick downsample factor
             if zoom < 6:
                 level = 4
             elif zoom < 12:
                 level = 8
             else:
                 level = 16
-            composite = self.renderer.composite(offsets, level)
-            # Update layer data on Qt main thread
-            QTimer.singleShot(0, lambda: setattr(self.image_layer, 'data', composite))
+
+            # Composite and update
+            comp = self.renderer.composite(offsets, level)
+            QTimer.singleShot(0, lambda: setattr(self.image_layer, "data", comp))
 
         future.add_done_callback(on_done)
