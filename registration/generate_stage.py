@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from stitcher_pipeline.constants import ROWCOL_TEMPLATE, DEFAULT_TILE_SHAPE
-from stitcher_pipeline.utils import discover_channels
+from registration.constants import ROWCOL_TEMPLATE, DEFAULT_TILE_SHAPE
+from registration.utils import discover_channels
 
 # ---------------------------------------------------------------------------
 

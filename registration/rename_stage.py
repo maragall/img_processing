@@ -4,8 +4,8 @@ from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 import os
-from stitcher_pipeline.utils import iter_tiffs
-from stitcher_pipeline.constants import FOV_SUFFIX_RE
+from registration.utils import iter_tiffs
+from registration.constants import FOV_SUFFIX_RE
 
 def rename_stage(tile_dir: Path) -> None:
     csv_path = tile_dir / "coordinates.csv"

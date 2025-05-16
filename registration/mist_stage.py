@@ -128,7 +128,7 @@ def build_params(tile_dir: Path) -> Any:  # ← CHANGED: now returns StitchParam
 
     # ── INPUT ──────────────────────────────────────────────────────────────
     ip.setImageDir(tile_dir.as_posix())
-    ip.setFilenamePattern("manual_r{rr}_c{cc}_0_Fluorescence_405_nm_Ex.tiff")
+    ip.setFilenamePattern("current_r{rr}_c{cc}_0_Fluorescence_405_nm_Ex.bmp")
     ip.setFilenamePatternLoaderType(LoaderType.ROWCOL)
     ip.setGridWidth(8)
     ip.setGridHeight(11)

@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np, tifffile, os
 from collections import Counter
-from stitcher_pipeline.utils import iter_tiffs, center_crop, zero_pad, overwrite_tiff
-from stitcher_pipeline.constants import DEFAULT_TILE_SHAPE
+from registration.utils import iter_tiffs, center_crop, zero_pad, overwrite_tiff
+from registration.constants import DEFAULT_TILE_SHAPE
 
 def uniformize_stage(tile_dir: Path, target_shape=DEFAULT_TILE_SHAPE) -> None:
     # gather stats
